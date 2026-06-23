@@ -3,13 +3,11 @@ const ctx = canvas.getContext("2d", { alpha: true });
 
 const CONFIG = {
   sampleGap: 2,
-  maxParticleSamples: 70000,
-  mobileMaxParticleSamples: 42000,
-  maxEdgeShellParticles: 30000,
-  mobileMaxEdgeShellParticles: 18000,
-  maxDevicePixelRatio: 1.25,
-  mobileMaxDevicePixelRatio: 1,
-  maxCanvasPixels: 1200000,
+  maxParticleSamples: 95000,
+  mobileMaxParticleSamples: 62000,
+  maxDevicePixelRatio: 1.5,
+  mobileMaxDevicePixelRatio: 1.25,
+  maxCanvasPixels: 1800000,
   particleSize: 1.5,
   stableZoneRatio: 0.45,
   transitionRatio: 0.8,
@@ -130,10 +128,6 @@ const state = {
   height: 0,
   dpr: 1,
   particles: [],
-  activeParticles: [],
-  glowParticles: [],
-  whiteAccentParticles: [],
-  edgeStreamParticles: [],
   edgeShellParticles: [],
   imageLayer: null,
   currentSource: null,
@@ -144,7 +138,7 @@ const state = {
   resizeTimer: 0,
   regenerateTimer: 0,
   performance: {
-    quality: 0.78,
+    quality: 1,
     frameCount: 0,
     elapsed: 0,
   },
@@ -782,7 +776,6 @@ function buildParticlesFromSource(source) {
   }
 
   state.particles = particles;
-  buildRenderGroups(particles, config);
   state.edgeShellParticles = createEdgeShellParticles(particles, config);
   state.config = config;
   applyOverallBrightness(config);
@@ -798,65 +791,8 @@ function scheduleRegenerate() {
   state.regenerateTimer = window.setTimeout(regenerateParticles, 120);
 }
 
-function buildRenderGroups(particles, config) {
-  const activeParticles = [];
-  const glowParticles = [];
-  const whiteAccentParticles = [];
-  const edgeStreamParticles = [];
-
-  for (const particle of particles) {
-    if (particle.edgeWeight <= 0) {
-      continue;
-    }
-
-    activeParticles.push(particle);
-
-    if (particle.glowSeed <= config.glowSampleRate) {
-      glowParticles.push(particle);
-    }
-
-    const darkWeight = 1 - smoothstep(0.16, 0.74, particle.luminance);
-    const whiteEdgeFactor = smoothstep(0.26, 1, particle.edgeWeight);
-    const whiteSelectionRate = clamp(
-      config.edgeWhiteAccentRate * whiteEdgeFactor * (0.72 + darkWeight * 0.62),
-      0,
-      0.72,
-    );
-
-    if (whiteEdgeFactor > 0 && particle.whiteSeed <= whiteSelectionRate) {
-      whiteAccentParticles.push(particle);
-    }
-
-    const streamEdgeFactor = smoothstep(0.32, 1, particle.edgeWeight);
-    const streamSelectionRate = clamp(
-      config.edgeStreamRate * streamEdgeFactor * (0.62 + darkWeight * 0.38 + 0.55),
-      0,
-      0.74,
-    );
-
-    if (streamEdgeFactor > 0 && particle.streamSeed <= streamSelectionRate) {
-      edgeStreamParticles.push(particle);
-    }
-  }
-
-  state.activeParticles = activeParticles;
-  state.glowParticles = glowParticles;
-  state.whiteAccentParticles = whiteAccentParticles;
-  state.edgeStreamParticles = edgeStreamParticles;
-}
-
 function createEdgeShellParticles(particles, config) {
   const shellParticles = [];
-  const shellBudget =
-    state.width <= 760 ? config.mobileMaxEdgeShellParticles : config.maxEdgeShellParticles;
-  const eligibleCount = particles.reduce(
-    (count, particle) => count + (particle.edgeWeight >= config.edgeShellInnerThreshold ? 1 : 0),
-    0,
-  );
-  const shellDensityScale = Math.min(
-    1,
-    shellBudget / Math.max(1, eligibleCount * config.edgeShellDensity),
-  );
 
   particles.forEach((particle, sourceIndex) => {
     if (particle.edgeWeight < config.edgeShellInnerThreshold) {
@@ -881,7 +817,7 @@ function createEdgeShellParticles(particles, config) {
     }
 
     const copyTarget = clamp(
-      densityWeight * config.edgeShellDensity * shellDensityScale * (0.72 + rimBias * 0.46),
+      densityWeight * config.edgeShellDensity * (0.72 + rimBias * 0.46),
       0,
       5,
     );
@@ -1146,7 +1082,11 @@ function drawGlowLayer(config) {
   ctx.globalCompositeOperation = "lighter";
   ctx.globalAlpha = 1;
 
-  for (const particle of state.glowParticles) {
+  for (const particle of state.particles) {
+    if (particle.edgeWeight <= 0) {
+      continue;
+    }
+
     if (particle.glowSeed > glowSampleRate) {
       continue;
     }
@@ -1208,7 +1148,11 @@ function drawStableImageLayer() {
 function drawParticleBodies() {
   ctx.globalCompositeOperation = "source-over";
 
-  for (const particle of state.activeParticles) {
+  for (const particle of state.particles) {
+    if (particle.edgeWeight <= 0) {
+      continue;
+    }
+
     ctx.globalAlpha = particle.alpha;
     ctx.fillStyle = particle.color;
     ctx.beginPath();
@@ -1222,7 +1166,11 @@ function drawParticleBodies() {
 function drawStableHighlightParticles(config) {
   ctx.globalCompositeOperation = "source-over";
 
-  for (const particle of state.activeParticles) {
+  for (const particle of state.particles) {
+    if (particle.edgeWeight <= 0) {
+      continue;
+    }
+
     const highlight = getStableHighlightPaint(particle, config);
 
     if (!highlight) {
@@ -1417,7 +1365,7 @@ function drawWhiteAccentParticles(config, edgeVeilFields) {
 
   ctx.globalCompositeOperation = "source-over";
 
-  for (const particle of state.whiteAccentParticles) {
+  for (const particle of state.particles) {
     const edgeFactor = smoothstep(0.26, 1, particle.edgeWeight);
 
     if (edgeFactor <= 0) {
@@ -1492,7 +1440,7 @@ function drawEdgeStreamParticles(config, edgeVeilFields) {
 
   ctx.globalCompositeOperation = "source-over";
 
-  for (const particle of state.edgeStreamParticles) {
+  for (const particle of state.particles) {
     const edgeFactor = smoothstep(0.32, 1, particle.edgeWeight);
 
     if (edgeFactor <= 0) {
@@ -1602,7 +1550,15 @@ function drawParticles(timestamp = performance.now()) {
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
   ctx.clearRect(0, 0, state.width, state.height);
 
-  for (const particle of state.activeParticles) {
+  for (const particle of state.particles) {
+    if (particle.edgeWeight <= 0) {
+      particle.x = particle.baseX;
+      particle.y = particle.baseY;
+      particle.vx = 0;
+      particle.vy = 0;
+      continue;
+    }
+
     updateParticle(particle, config, globalFlowX, globalFlowY, edgeGatherFields, edgeVeilFields, delta);
   }
 
