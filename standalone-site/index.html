@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片转粒子</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <canvas id="particleCanvas" aria-label="图片粒子画布"></canvas>
+
+      <section class="panel" aria-label="图片粒子控制">
+        <div class="panel__head">
+          <div>
+            <p class="eyebrow">Image Particles</p>
+            <h1>图片转粒子</h1>
+          </div>
+        </div>
+
+        <label class="upload-card" for="imageInput">
+          <input id="imageInput" type="file" accept="image/*" />
+          <span class="upload-card__title">上传图片</span>
+          <span class="upload-card__meta">按图片像素生成离散流沙粒子</span>
+        </label>
+
+        <div class="metrics" aria-live="polite">
+          <span><strong id="particleCount">0</strong> 粒子</span>
+        </div>
+
+        <div class="controls">
+          <label class="control">
+            <span>
+              <strong>稳定区比例</strong>
+              <em id="stableZoneRatioValue">0.45</em>
+            </span>
+            <input id="stableZoneRatio" type="range" min="0" max="1" step="0.01" value="0.45" />
+          </label>
+
+          <label class="control">
+            <span>
+              <strong>过渡等比例</strong>
+              <em id="transitionRatioValue">0.80</em>
+            </span>
+            <input id="transitionRatio" type="range" min="0" max="2" step="0.01" value="0.8" />
+          </label>
+
+          <label class="control">
+            <span>
+              <strong>粒子尺寸</strong>
+              <em id="particleSizeValue">6</em>
+            </span>
+            <input id="particleSize" type="range" min="0" max="10" step="1" value="6" />
+          </label>
+
+          <label class="control">
+            <span>
+              <strong>整体亮度</strong>
+              <em id="overallBrightnessValue">1.00</em>
+            </span>
+            <input id="overallBrightness" type="range" min="0" max="2" step="0.05" value="1" />
+          </label>
+
+          <label class="control">
+            <span>
+              <strong>辉光强度</strong>
+              <em id="glowIntensityValue">4</em>
+            </span>
+            <input id="glowIntensity" type="range" min="0" max="10" step="1" value="4" />
+          </label>
+
+          <label class="control">
+            <span>
+              <strong>边缘羽化强度</strong>
+              <em id="edgeGatherStrengthValue">4</em>
+            </span>
+            <input id="edgeGatherStrength" type="range" min="0" max="10" step="1" value="4" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="regenerateButton" type="button">重新生成粒子</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="./main.js?v=stable-image-overlap"></script>
+  </body>
+</html>
