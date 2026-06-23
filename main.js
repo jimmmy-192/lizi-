@@ -1071,34 +1071,10 @@ function drawGlowLayer(config) {
   ctx.globalAlpha = 1;
 }
 
-function drawStableImageLayer() {
-  const layer = state.imageLayer;
-
-  if (!layer || !layer.source || layer.stableRadius <= 0) {
-    return;
-  }
-
-  const { source, rect, centerX, centerY, stableRadius } = layer;
-  const overlapRadius = stableRadius + (state.config?.sampleGap || CONFIG.sampleGap) * 2;
-
-  ctx.save();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, overlapRadius, 0, TWO_PI);
-  ctx.clip();
-  ctx.drawImage(source, rect.offsetX, rect.offsetY, rect.width, rect.height);
-  ctx.restore();
-}
-
 function drawParticleBodies() {
   ctx.globalCompositeOperation = "source-over";
 
   for (const particle of state.particles) {
-    if (particle.edgeWeight <= 0) {
-      continue;
-    }
-
     ctx.globalAlpha = particle.alpha;
     ctx.fillStyle = particle.color;
     ctx.beginPath();
@@ -1113,10 +1089,6 @@ function drawStableHighlightParticles(config) {
   ctx.globalCompositeOperation = "source-over";
 
   for (const particle of state.particles) {
-    if (particle.edgeWeight <= 0) {
-      continue;
-    }
-
     const highlight = getStableHighlightPaint(particle, config);
 
     if (!highlight) {
@@ -1480,7 +1452,6 @@ function drawParticles(timestamp = performance.now()) {
     updateParticle(particle, config, globalFlowX, globalFlowY, edgeGatherFields, edgeVeilFields, delta);
   }
 
-  drawStableImageLayer();
   drawGlowLayer(config);
   drawParticleBodies();
   drawStableHighlightParticles(config);
