@@ -1,4 +1,4 @@
-const CACHE_NAME = "lizi-particles-cache-v1";
+const CACHE_NAME = "lizi-particles-cache-v2";
 const CORE_ASSETS = ["./", "./index.html", "./styles.css", "./main.js"];
 
 self.addEventListener("install", (event) => {
