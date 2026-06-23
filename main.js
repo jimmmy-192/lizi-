@@ -3,6 +3,11 @@ const ctx = canvas.getContext("2d", { alpha: true });
 
 const CONFIG = {
   sampleGap: 2,
+  maxParticleSamples: 95000,
+  mobileMaxParticleSamples: 62000,
+  maxDevicePixelRatio: 1.5,
+  mobileMaxDevicePixelRatio: 1.25,
+  maxCanvasPixels: 1800000,
   particleSize: 1.5,
   stableZoneRatio: 0.45,
   transitionRatio: 0.8,
@@ -132,6 +137,11 @@ const state = {
   config: null,
   resizeTimer: 0,
   regenerateTimer: 0,
+  performance: {
+    quality: 1,
+    frameCount: 0,
+    elapsed: 0,
+  },
 };
 
 function clamp(value, min, max) {
@@ -511,10 +521,48 @@ function updateLabels() {
   labels.edgeGatherStrength.textContent = elements.edgeGatherStrength.value;
 }
 
+function getRenderDpr() {
+  const rawDpr = window.devicePixelRatio || 1;
+  const dprCap =
+    window.innerWidth <= 760 ? CONFIG.mobileMaxDevicePixelRatio : CONFIG.maxDevicePixelRatio;
+  const pixelCap = Math.sqrt(CONFIG.maxCanvasPixels / Math.max(1, window.innerWidth * window.innerHeight));
+
+  return clamp(Math.min(rawDpr, dprCap, pixelCap), 1, dprCap);
+}
+
+function getTargetParticleSamples(config) {
+  return state.width <= 760 ? config.mobileMaxParticleSamples : config.maxParticleSamples;
+}
+
+function updatePerformanceQuality(frameTime) {
+  const performanceState = state.performance;
+  performanceState.frameCount += 1;
+  performanceState.elapsed += frameTime;
+
+  if (performanceState.elapsed < 1000) {
+    return;
+  }
+
+  const fps = (performanceState.frameCount * 1000) / performanceState.elapsed;
+
+  if (fps < 28) {
+    performanceState.quality = Math.max(0.48, performanceState.quality - 0.16);
+  } else if (fps > 50) {
+    performanceState.quality = Math.min(1, performanceState.quality + 0.08);
+  }
+
+  performanceState.frameCount = 0;
+  performanceState.elapsed = 0;
+}
+
+function getRuntimeQuality() {
+  return state.performance.quality;
+}
+
 function resizeCanvas() {
   state.width = window.innerWidth;
   state.height = window.innerHeight;
-  state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  state.dpr = getRenderDpr();
   canvas.width = Math.floor(state.width * state.dpr);
   canvas.height = Math.floor(state.height * state.dpr);
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
@@ -637,7 +685,11 @@ function buildParticlesFromSource(source) {
 
   const imageData = sampleCtx.getImageData(0, 0, rect.width, rect.height);
   const data = imageData.data;
-  const gap = config.sampleGap;
+  const targetSamples = getTargetParticleSamples(config);
+  const gap = Math.max(
+    config.sampleGap,
+    Math.ceil(Math.sqrt((rect.width * rect.height) / targetSamples)),
+  );
 
   const particles = [];
   const centerX = rect.offsetX + rect.width / 2;
@@ -1025,6 +1077,8 @@ function drawGlowLayer(config) {
     return;
   }
 
+  const quality = getRuntimeQuality();
+  const glowSampleRate = config.glowSampleRate * lerp(0.42, 1, quality);
   ctx.globalCompositeOperation = "lighter";
   ctx.globalAlpha = 1;
 
@@ -1033,7 +1087,7 @@ function drawGlowLayer(config) {
       continue;
     }
 
-    if (particle.glowSeed > config.glowSampleRate) {
+    if (particle.glowSeed > glowSampleRate) {
       continue;
     }
 
@@ -1206,16 +1260,26 @@ function getEdgeShellParticleRenderState(shellParticle, edgeShellFields, config,
 
 function drawEdgeShellGlowLayer(config, edgeShellFields) {
   const amount = clamp(config.edgeGatherStrength / 10, 0, 1);
+  const quality = getRuntimeQuality();
 
-  if (amount <= 0 || state.edgeShellParticles.length === 0 || config.edgeShellGlowAlpha <= 0) {
+  if (
+    amount <= 0 ||
+    quality < 0.56 ||
+    state.edgeShellParticles.length === 0 ||
+    config.edgeShellGlowAlpha <= 0
+  ) {
     return;
   }
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  ctx.filter = `blur(${config.edgeShellGlowBlur}px)`;
+  ctx.filter = `blur(${Math.max(2, config.edgeShellGlowBlur * quality)}px)`;
 
   for (const shellParticle of state.edgeShellParticles) {
+    if (shellParticle.alphaSeed > lerp(0.32, 1, quality)) {
+      continue;
+    }
+
     const renderState = getEdgeShellParticleRenderState(
       shellParticle,
       edgeShellFields,
@@ -1257,6 +1321,7 @@ function drawEdgeShellGlowLayer(config, edgeShellFields) {
 
 function drawEdgeShellParticles(config, edgeShellFields) {
   const amount = clamp(config.edgeGatherStrength / 10, 0, 1);
+  const quality = getRuntimeQuality();
 
   if (amount <= 0 || state.edgeShellParticles.length === 0) {
     return;
@@ -1265,6 +1330,10 @@ function drawEdgeShellParticles(config, edgeShellFields) {
   ctx.globalCompositeOperation = "source-over";
 
   for (const shellParticle of state.edgeShellParticles) {
+    if (shellParticle.alphaSeed > lerp(0.58, 1, quality)) {
+      continue;
+    }
+
     const renderState = getEdgeShellParticleRenderState(
       shellParticle,
       edgeShellFields,
@@ -1288,6 +1357,7 @@ function drawEdgeShellParticles(config, edgeShellFields) {
 
 function drawWhiteAccentParticles(config, edgeVeilFields) {
   const amount = clamp(config.edgeGatherStrength / 10, 0, 1);
+  const quality = getRuntimeQuality();
 
   if (amount <= 0) {
     return;
@@ -1304,7 +1374,7 @@ function drawWhiteAccentParticles(config, edgeVeilFields) {
 
     const darkWeight = 1 - smoothstep(0.16, 0.74, particle.luminance);
     const selectionRate = clamp(
-      config.edgeWhiteAccentRate * edgeFactor * (0.72 + darkWeight * 0.62),
+      config.edgeWhiteAccentRate * edgeFactor * (0.72 + darkWeight * 0.62) * lerp(0.55, 1, quality),
       0,
       0.72,
     );
@@ -1362,8 +1432,9 @@ function drawWhiteAccentParticles(config, edgeVeilFields) {
 
 function drawEdgeStreamParticles(config, edgeVeilFields) {
   const amount = clamp(config.edgeGatherStrength / 10, 0, 1);
+  const quality = getRuntimeQuality();
 
-  if (amount <= 0) {
+  if (amount <= 0 || quality < 0.54) {
     return;
   }
 
@@ -1381,7 +1452,8 @@ function drawEdgeStreamParticles(config, edgeVeilFields) {
     const selectionRate = clamp(
       config.edgeStreamRate *
         edgeFactor *
-        (0.62 + darkWeight * 0.38 + veilInfluence * 0.55),
+        (0.62 + darkWeight * 0.38 + veilInfluence * 0.55) *
+        lerp(0.5, 1, quality),
       0,
       0.74,
     );
@@ -1459,9 +1531,11 @@ function drawEdgeStreamParticles(config, edgeVeilFields) {
 function drawParticles(timestamp = performance.now()) {
   state.animationId = requestAnimationFrame(drawParticles);
 
-  const delta = Math.min(33.34, timestamp - state.lastFrame || 16.67);
+  const frameTime = timestamp - state.lastFrame || 16.67;
+  const delta = Math.min(33.34, frameTime);
   state.lastFrame = timestamp;
   state.time += delta / 16.67;
+  updatePerformanceQuality(frameTime);
 
   const config = state.config || readConfig();
   const time = state.time;
@@ -1477,6 +1551,14 @@ function drawParticles(timestamp = performance.now()) {
   ctx.clearRect(0, 0, state.width, state.height);
 
   for (const particle of state.particles) {
+    if (particle.edgeWeight <= 0) {
+      particle.x = particle.baseX;
+      particle.y = particle.baseY;
+      particle.vx = 0;
+      particle.vy = 0;
+      continue;
+    }
+
     updateParticle(particle, config, globalFlowX, globalFlowY, edgeGatherFields, edgeVeilFields, delta);
   }
 
@@ -1553,9 +1635,33 @@ function bindEvents() {
       regenerateParticles();
     }, 160);
   });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      cancelAnimationFrame(state.animationId);
+      state.animationId = 0;
+      return;
+    }
+
+    if (!state.animationId) {
+      state.lastFrame = performance.now();
+      state.animationId = requestAnimationFrame(drawParticles);
+    }
+  });
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || window.location.protocol === "file:") {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+  });
 }
 
 function init() {
+  registerServiceWorker();
   resizeCanvas();
   updateLabels();
   applyOverallBrightness(readConfig());
